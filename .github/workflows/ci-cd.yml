@@ -8,6 +8,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ec2-13-222-184-143.compute-1.amazonaws.com
 
     steps:
     - name: Checkout code
@@ -17,7 +19,8 @@ jobs:
     - name: Add server SSH key to known_hosts
       run: |
         mkdir -p ~/.ssh
-        ssh-keyscan ec2-98-91-16-9.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+        # use DEPLOY_HOST so hostnames stay in sync
+        ssh-keyscan "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
     - name: Start ssh-agent and add private key
       uses: webfactory/ssh-agent@v0.5.4
@@ -27,13 +30,14 @@ jobs:
     - name: Copy files and deploy to server
       run: |
         # Copy the necessary deployment files to the server.
-        scp ./nginx/templates/nginx.conf ubuntu@ec2-13-222-184-143.compute-1.amazonaws.com:/home/ubuntu/nginx.conf
-        scp ./docker-compose.yml ubuntu@ec2-13-222-184-143.compute-1.amazonaws.com:/home/ubuntu/docker-compose.yml
+        # Add ssh options to avoid host key failures during CI runs; remove for stricter security once known_hosts is managed.
+        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/templates/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx.conf
+        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./docker-compose.yml ubuntu@${DEPLOY_HOST}:/home/ubuntu/docker-compose.yml
 
 
     - name: Deploy on server (overwrite sites-available and set default)
       run: |
-        ssh -o StrictHostKeyChecking=no ubuntu@ec2-13-222-184-143.compute-1.amazonaws.com << 'EOF'
+        ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} << 'EOF'
           set -e
 
           # Ensure docker-compose is present and pull configured images, then bring services up
@@ -43,8 +47,6 @@ jobs:
             sudo chmod +x /usr/local/bin/docker-compose
           fi
 
-          
-   
           # Pull images specified in docker-compose and restart services
           sudo docker-compose pull || true
           sudo docker-compose up -d --remove-orphans
