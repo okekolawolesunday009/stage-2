@@ -4,4 +4,3 @@ FROM nginx:stable-alpine
 RUN apk add --no-cache gettext
 
 # Keep the upstream image's default files; the compose command will render the template
-# and run nginx in the foreground. No entrypoint change required.
