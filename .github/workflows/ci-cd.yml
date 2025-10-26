@@ -52,7 +52,6 @@ jobs:
 
           cd /home/ubuntu
 
-          rm -rf ./*
           # write nginx config (backup first)
           sudo mkdir -p /etc/nginx/backup || true
           sudo cp /etc/nginx/nginx.conf /etc/nginx/backup/nginx.conf.$(date +%s) || true
