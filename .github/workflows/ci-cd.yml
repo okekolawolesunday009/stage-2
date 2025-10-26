@@ -40,7 +40,7 @@ jobs:
       run: |
         # Copy the necessary deployment files to the server.
         # Add ssh options to avoid host key failures during CI runs; remove for stricter security once known_hosts is managed.
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/templates/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx.conf
+        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx.conf
         scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./docker-compose.yml ubuntu@${DEPLOY_HOST}:/home/ubuntu/docker-compose.yml
 
 
