@@ -39,16 +39,42 @@ jobs:
     - name: Prepare directory structure on server
       run: |
         ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} << 'EOF'
+          # Create directories with proper permissions
           mkdir -p /home/ubuntu/nginx/templates
+          chmod 755 /home/ubuntu/nginx
+          chmod 755 /home/ubuntu/nginx/templates
+          
+          # Verify directories were created
+          ls -la /home/ubuntu/
+          ls -la /home/ubuntu/nginx/
         EOF
 
     - name: Copy files and deploy to server
       run: |
+        # Verify local files exist before copying
+        echo "Checking local files..."
+        ls -la ./nginx/
+        ls -la ./nginx/templates/
+        ls -la ./docker-compose.yml
+        
         # Copy the necessary deployment files to the server.
         # Add ssh options to avoid host key failures during CI runs; remove for stricter security once known_hosts is managed.
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/Dockerfile ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx/Dockerfile
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/templates/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx/templates/nginx.conf
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./docker-compose.yml ubuntu@${DEPLOY_HOST}:/home/ubuntu/docker-compose.yml
+        echo "Copying nginx/Dockerfile..."
+        scp -v -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/Dockerfile ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx/Dockerfile
+        
+        echo "Copying nginx/templates/nginx.conf..."
+        scp -v -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/templates/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx/templates/nginx.conf
+        
+        echo "Copying docker-compose.yml..."
+        scp -v -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./docker-compose.yml ubuntu@${DEPLOY_HOST}:/home/ubuntu/docker-compose.yml
+        
+        # Verify files were copied successfully
+        ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} << 'EOF'
+          echo "Verifying copied files..."
+          ls -la /home/ubuntu/
+          ls -la /home/ubuntu/nginx/
+          ls -la /home/ubuntu/nginx/templates/
+        EOF
 
 
     - name: Deploy on server (overwrite sites-available and set default)
