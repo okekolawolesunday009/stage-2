@@ -83,8 +83,18 @@ jobs:
             sudo apt-get autoremove -y || true
           fi
 
-          docker --version
-          docker-compose prune -f || true
+          echo "---- Stopping system nginx (if running) ----"
+          sudo systemctl stop nginx || true
+
+          echo "---- Cleaning up old Docker containers and networks ----"
+          sudo docker stop $(sudo docker ps -aq) 2>/dev/null || true
+          sudo docker rm $(sudo docker ps -aq) 2>/dev/null || true
+          sudo docker network prune -f || true
+          sudo docker volume prune -f || true
+          sudo docker system prune -af || true
+
+          echo "---- Removing any existing nginx-alpine container ----"
+          sudo docker rm -f nginx-alpine 2>/dev/null || true
 
           # Stop local system nginx (if present) so Docker can bind port 80. If you want to keep system nginx,
           # change NGINX_PORT in your .env to a non-privileged port (e.g., 8080).
