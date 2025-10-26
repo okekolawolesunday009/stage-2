@@ -71,6 +71,13 @@ jobs:
           docker --version
           docker-compose prune -f || true
 
+          # Stop local system nginx (if present) so Docker can bind port 80. If you want to keep system nginx,
+          # change NGINX_PORT in your .env to a non-privileged port (e.g., 8080).
+          sudo systemctl stop nginx || true
+
+          # Gracefully stop any previous compose stack in this directory to free ports
+          sudo docker-compose down --remove-orphans || true
+
           # Pull images specified in docker-compose and restart services (use sudo to ensure access to docker socket)
           sudo docker-compose pull || true
           sudo docker-compose up -d --remove-orphans
