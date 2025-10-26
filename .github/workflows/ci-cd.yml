@@ -106,9 +106,7 @@ jobs:
 
           # Pull images specified in docker-compose and restart services (use sudo to ensure access to docker socket)
           sudo docker-compose pull || true
-          sudo docker-compose up -d --remove-orphans
-
-          sudo docker run -d -p 8080:80 --name nginx-alpine nginx:alpine
+          sudo docker-compose up -d --remove-orphans || true
 
 
           echo "Deployment and configuration completed successfully!"
