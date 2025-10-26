@@ -38,6 +38,6 @@ services:
       - NODE_ENV=production
       - APP_POOL=green
 
-  networks:
-    default:
-      driver: bridge  
+networks:
+  default:
+    driver: bridge  
