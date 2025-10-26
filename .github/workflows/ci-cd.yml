@@ -47,6 +47,7 @@ jobs:
         # Create directories and copy files in a single SSH session to avoid timing issues
         ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} << 'EOF'
           echo "Creating directory structure..."
+          mkdir -p /home/ubuntu/nginx
           mkdir -p /home/ubuntu/nginx/templates
           chmod 755 /home/ubuntu/nginx
           chmod 755 /home/ubuntu/nginx/templates
