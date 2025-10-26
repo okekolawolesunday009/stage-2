@@ -38,8 +38,9 @@ jobs:
 
     - name: Copy files and deploy to server
       run: |
-        # Copy all necessary deployment files to the server including nginx Dockerfile
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./nginx ubuntu@${DEPLOY_HOST}:/home/ubuntu/
+        # Copy the necessary deployment files to the server.
+        # Add ssh options to avoid host key failures during CI runs; remove for stricter security once known_hosts is managed.
+        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/templates/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx.conf
         scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./docker-compose.yml ubuntu@${DEPLOY_HOST}:/home/ubuntu/docker-compose.yml
 
 
@@ -73,43 +74,14 @@ jobs:
           # Stop local system nginx (if present) so Docker can bind port 80. If you want to keep system nginx,
           # change NGINX_PORT in your .env to a non-privileged port (e.g., 8080).
           sudo systemctl stop nginx || true
-
-          # Clean up any previous containers and images to avoid conflicts
-          sudo docker-compose down --remove-orphans || true
-          
-          # Remove any existing custom nginx image to force rebuild
-          sudo docker rmi nginx-with-envsubst:latest || true
-          
-          # Build the custom nginx image with envsubst support
-          echo "Building custom nginx image..."
           sudo docker-compose build nginx
-          
-          # Pull app images specified in docker-compose 
-          echo "Pulling application images..."
-          sudo docker-compose pull blue_app green_app || true
-          
-          # Start all services in the correct order
-          echo "Starting blue-green deployment with nginx load balancer..."
+
+          # Gracefully stop any previous compose stack in this directory to free ports
+          sudo docker-compose down --remove-orphans || true
+
+          # Pull images specified in docker-compose and restart services (use sudo to ensure access to docker socket)
+          sudo docker-compose pull || true
           sudo docker-compose up -d --remove-orphans
-          
-          # Wait a moment for services to initialize
-          sleep 10
-          
-          # Show status of all services
-          echo "=== Service Status ==="
-          sudo docker-compose ps
-          
-          # Show logs for troubleshooting
-          echo "=== Nginx Logs ==="
-          sudo docker-compose logs nginx --tail=50
-          echo "=== Blue App Logs ==="  
-          sudo docker-compose logs blue_app --tail=20
-          echo "=== Green App Logs ==="
-          sudo docker-compose logs green_app --tail=20
-          
-          # Test if nginx is responding
-          echo "=== Testing nginx response ==="
-          curl -f http://localhost:80 || echo "Warning: nginx not responding on port 80"
 
           echo "Deployment and configuration completed successfully!"
         EOF
