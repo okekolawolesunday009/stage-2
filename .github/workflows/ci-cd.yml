@@ -38,7 +38,7 @@ jobs:
 
     - name: Copy files and deploy to server
       run: |
-        # Copy the necessary deployment files to the server.
+        # Copy the necessary deployment files to the server..
         # Add ssh options to avoid host key failures during CI runs; remove for stricter security once known_hosts is managed.
                                                                                               
         scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/templates/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx.conf
