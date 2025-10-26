@@ -36,11 +36,18 @@ jobs:
           echo ".env not found in repo — skipping .env upload. If you want me to generate .env on the server from secrets, tell me and I'll add that step."
         fi
 
+    - name: Prepare directory structure on server
+      run: |
+        ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} << 'EOF'
+          mkdir -p /home/ubuntu/nginx/templates
+        EOF
+
     - name: Copy files and deploy to server
       run: |
         # Copy the necessary deployment files to the server.
         # Add ssh options to avoid host key failures during CI runs; remove for stricter security once known_hosts is managed.
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./nginx ubuntu@${DEPLOY_HOST}:/home/ubuntu/
+        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/Dockerfile ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx/Dockerfile
+        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/templates/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx/templates/nginx.conf
         scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./docker-compose.yml ubuntu@${DEPLOY_HOST}:/home/ubuntu/docker-compose.yml
 
 
