@@ -13,6 +13,8 @@ services:
       - ./nginx/templates/nginx.conf:/etc/nginx/templates/nginx.conf:ro
     environment:
       - ACTIVE_POOL=${ACTIVE_POOL}
+      - RELEASE_ID_BLUE=${RELEASE_ID_BLUE}
+      - RELEASE_ID_GREEN=${RELEASE_ID_GREEN}
     depends_on:
       - blue_app
       - green_app
