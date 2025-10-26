@@ -50,13 +50,9 @@ jobs:
             sudo chmod +x /usr/local/bin/docker-compose
           fi
 
-          cd /home/ubuntu
+        
 
-          # write nginx config (backup first)
-          sudo mkdir -p /etc/nginx/backup || true
-          sudo cp /etc/nginx/nginx.conf /etc/nginx/backup/nginx.conf.$(date +%s) || true
-          sudo mv /home/ubuntu/nginx.conf /etc/nginx/nginx.conf
-
+        
           # Pull images specified in docker-compose and restart services
           sudo docker-compose pull || true
           sudo docker-compose up -d --remove-orphans
