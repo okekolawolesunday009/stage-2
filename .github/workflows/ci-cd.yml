@@ -27,7 +27,7 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-    - name: Upload .env to server (if - present)
+    - name: Upload .env to server (if present)
       run: |
         if [ -f .env ]; then
           echo "Found .env in repo — copying to server"
@@ -38,42 +38,10 @@ jobs:
 
     - name: Copy files and deploy to server
       run: |
-        # Verify local files exist before copying
-        echo "Checking local files..."
-        ls -la ./nginx/
-        ls -la ./nginx/templates/
-        ls -la ./docker-compose.yml
-        
-        # Create directories and copy files in a single SSH session to avoid timing issues
-        ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} << 'EOF'
-          echo "Creating directory structure..."
-          mkdir -p /home/ubuntu/nginx
-          mkdir -p /home/ubuntu/nginx/templates
-          chmod 755 /home/ubuntu/nginx
-          chmod 755 /home/ubuntu/nginx/templates
-          
-          echo "Verifying directories exist..."
-          ls -la /home/ubuntu/
-          ls -la /home/ubuntu/nginx/
-        EOF
-        
         # Copy the necessary deployment files to the server.
-        echo "Copying nginx/Dockerfile..."
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/Dockerfile ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx/Dockerfile
-        
-        echo "Copying nginx/templates/nginx.conf..."
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/templates/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx/templates/nginx.conf
-        
-        echo "Copying docker-compose.yml..."
+        # Add ssh options to avoid host key failures during CI runs; remove for stricter security once known_hosts is managed.
+        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./nginx/templates/nginx.conf ubuntu@${DEPLOY_HOST}:/home/ubuntu/nginx.conf
         scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./docker-compose.yml ubuntu@${DEPLOY_HOST}:/home/ubuntu/docker-compose.yml
-        
-        # Verify files were copied successfully
-        ssh -o StrictHostKeyChecking=no ubuntu@${DEPLOY_HOST} << 'EOF'
-          echo "Verifying copied files..."
-          ls -la /home/ubuntu/
-          ls -la /home/ubuntu/nginx/
-          ls -la /home/ubuntu/nginx/templates/
-        EOF
 
 
     - name: Deploy on server (overwrite sites-available and set default)
@@ -106,14 +74,12 @@ jobs:
           # Stop local system nginx (if present) so Docker can bind port 80. If you want to keep system nginx,
           # change NGINX_PORT in your .env to a non-privileged port (e.g., 8080).
           sudo systemctl stop nginx || true
-         
 
           # Gracefully stop any previous compose stack in this directory to free ports
           sudo docker-compose down --remove-orphans || true
 
           # Pull images specified in docker-compose and restart services (use sudo to ensure access to docker socket)
           sudo docker-compose pull || true
-          sudo docker-compose build nginx
           sudo docker-compose up -d --remove-orphans
 
           echo "Deployment and configuration completed successfully!"
