@@ -18,6 +18,7 @@ services:
 
   blue_app:
     image: ${BLUE_IMAGE}
+    container_name: blue_app
     ports:
       - "${BLUE_PORT}:${PORT}"
     environment:
@@ -28,6 +29,7 @@ services:
 
   green_app:
     image: ${GREEN_IMAGE}
+    container_name: green_app
     ports:
       - "${GREEN_PORT}:${PORT}"
     environment:
@@ -35,3 +37,7 @@ services:
       - RELEASE_ID=${RELEASE_ID_GREEN}
       - NODE_ENV=production
       - APP_POOL=green
+
+  networks:
+    default:
+      driver: bridge  
