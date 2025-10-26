@@ -79,8 +79,11 @@ jobs:
           sudo docker-compose down --remove-orphans || true
 
           # Pull images specified in docker-compose and restart services (use sudo to ensure access to docker socket)
+          
           sudo docker-compose pull || true
+          sudo docker-compose build nginx
           sudo docker-compose up -d --remove-orphans
+          sudo docker-compose logs nginx --tail=200
 
           echo "Deployment and configuration completed successfully!"
         EOF
