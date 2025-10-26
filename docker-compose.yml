@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: ${NGINX_IMAGE}
+    ports:
+      - ${NGINX_PORT}:80
+    volumes:
+      # mount the templated nginx config into the container where the start command expects it
+      - ./nginx/templates/nginx.conf:/etc/nginx/templates/nginx.conf:ro
+    environment:
+      - ACTIVE_POOL=${ACTIVE_POOL}
+    depends_on:
+      - blue_app
+      - green_app
+    # At container start determine which host is primary based on ACTIVE_POOL, then render the template
+    # using envsubst. This allows manual toggle by changing ACTIVE_POOL + nginx -s reload.
+    command: /bin/sh -c "if [ \"$ACTIVE_POOL\" = 'blue' ]; then export PRIMARY=blue_app; export BACKUP=green_app; else export PRIMARY=green_app; export BACKUP=blue_app; fi && envsubst '\$PRIMARY \$BACKUP \$RELEASE_ID_BLUE \$RELEASE_ID_GREEN' < /etc/nginx/templates/nginx.conf > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+
+  blue_app:
+    image: ${BLUE_IMAGE}
+    ports:
+      - ${BLUE_PORT}:${PORT}
+    environment:
+      - PORT=${PORT}
+      - RELEASE_ID=${RELEASE_ID_BLUE}
+      - NODE_ENV=production
+      - APP_POOL=blue
+  
+
+  green_app:
+    image: ${GREEN_IMAGE}
+    ports:
+      - ${GREEN_PORT}:${PORT}
+    environment:
+      - PORT=${PORT}
+      - RELEASE_ID=${RELEASE_ID_GREEN}
+      - NODE_ENV=production
+      - APP_POOL=green
+  

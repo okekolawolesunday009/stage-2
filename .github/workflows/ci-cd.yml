@@ -36,13 +36,6 @@ jobs:
         ssh -o StrictHostKeyChecking=no ubuntu@ec2-98-91-16-9.compute-1.amazonaws.com << 'EOF'
           set -e
 
-          # Optional: ensure nginx is installed (uncomment if you want automatic install)
-          if ! command -v nginx >/dev/null 2>&1; then
-            echo "Nginx not found, installing..."
-            sudo apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
-          fi
-
           # Ensure docker-compose is present and pull configured images, then bring services up
           if ! command -v docker-compose >/dev/null 2>&1; then
             echo "docker-compose not found, attempting to install..."
@@ -50,9 +43,8 @@ jobs:
             sudo chmod +x /usr/local/bin/docker-compose
           fi
 
-        
-
-        
+          
+   
           # Pull images specified in docker-compose and restart services
           sudo docker-compose pull || true
           sudo docker-compose up -d --remove-orphans

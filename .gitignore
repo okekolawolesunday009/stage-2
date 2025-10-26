@@ -1,0 +1,20 @@
+# Node/Python/General
+node_modules/
+venv/
+env/
+*.pyc
+__pycache__/
+.venv/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker
+docker-compose.override.yml
+*.log
+
+# OS
+.DS_Store
+thumbs.db
