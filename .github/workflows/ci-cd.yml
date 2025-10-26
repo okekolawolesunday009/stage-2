@@ -50,13 +50,28 @@ jobs:
           set -e
 
           # Ensure docker-compose is present and pull configured images, then bring services up
+          # Ensure Docker Engine is installed and running (required by docker-compose)
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "Docker not found, installing docker.io..."
+            sudo apt-get update
+            sudo apt-get install -y docker.io
+            sudo systemctl enable --now docker
+          else
+            echo "Docker already installed"
+            sudo systemctl enable --now docker || true
+          fi
+
+          # Ensure docker-compose is present (compose V1 binary); if not, install it
           if ! command -v docker-compose >/dev/null 2>&1; then
             echo "docker-compose not found, attempting to install..."
             sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
             sudo chmod +x /usr/local/bin/docker-compose
           fi
 
-          # Pull images specified in docker-compose and restart services
+          docker --version
+          docker-compose prune -f || true
+
+          # Pull images specified in docker-compose and restart services (use sudo to ensure access to docker socket)
           sudo docker-compose pull || true
           sudo docker-compose up -d --remove-orphans
 
