@@ -83,7 +83,7 @@ jobs:
             sudo apt-get autoremove -y || true
           fi
 
-          echo "---- Stopping system nginx (if running) ----"
+          echo "----- Stopping system nginx (if running) ----"
           sudo systemctl stop nginx || true
 
           echo "---- Cleaning up old Docker containers and networks ----"
