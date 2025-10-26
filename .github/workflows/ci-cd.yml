@@ -24,13 +24,6 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-    - name: Copy files and deploy to server
-      run: |
-        # Copy the necessary deployment files to the server
-        scp ./nginx/templates/nginx.conf ubuntu@ec2-98-91-16-9.compute-1.amazonaws.com:/home/ubuntu/nginx.conf
-        scp ./docker-compose.yml ubuntu@ec2-98-91-16-9.compute-1.amazonaws.com:/home/ubuntu/docker-compose.yml
-
-
     - name: Deploy on server (overwrite sites-available and set default)
       run: |
         ssh -o StrictHostKeyChecking=no ubuntu@ec2-98-91-16-9.compute-1.amazonaws.com << 'EOF'
