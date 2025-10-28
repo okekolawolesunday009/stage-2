@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      DEPLOY_HOST: 54.234.2.225
+      DEPLOY_HOST: 50.19.203.9
 
     steps:
     - name: Checkout code
