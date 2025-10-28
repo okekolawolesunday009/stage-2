@@ -2,7 +2,7 @@
 
 Minimal infra repo for an nginx front with blue/green backend containers.
 
-Quick start
+Quick start intro
 
 1. Copy `.env.example` to `.env` and edit values.
 2. Run:
