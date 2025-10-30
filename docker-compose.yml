@@ -7,7 +7,8 @@ services:
     ports:
       - "${NGINX_PORT}:80"
     volumes:
-      -  ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.conf.template:/etc/nginx/nginx.conf:ro
+      - nginx-logs:/var/log/nginx
     environment:
       - ACTIVE_POOL=${ACTIVE_POOL}
       - RELEASE_ID_BLUE=${RELEASE_ID_BLUE}
@@ -38,6 +39,17 @@ services:
       - RELEASE_ID=${RELEASE_ID_GREEN}
       - NODE_ENV=production
       - APP_POOL=green
+
+  alert_watcher:
+    build: ./watcher
+    container_name: alert_watcher
+    volumes:
+      - nginx-logs:/var/log/nginx:ro
+    env_file: .env
+    environment:
+      - WATCH_LOG_PATH=/var/log/nginx/access.log
+    depends_on:
+      - nginx
 
 networks:
   default:
