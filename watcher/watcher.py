@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """
-Simple log-watcher for Nginx access.log.
-Reads lines appended to log file, parses fields, computes rolling 5xx error rate,
-and posts alerts to Slack via webhook.
+Robust log-watcher for Nginx access.log.
+Tails the log file without using seek (works with Docker-mounted logs).
+Parses fields, computes rolling 5xx error rate, and posts alerts to Slack.
 """
 import os
 import re
 import time
-import json
 from collections import deque
-from datetime import datetime
-
 import requests
 
 # Config from env
@@ -28,12 +25,14 @@ last_alert_ts = 0
 last_error_rate_alert_ts = 0
 
 # Regex to extract fields written by our nginx.conf.template
-FIELD_RE = re.compile(r'pool:(?P<pool>\S+) release:(?P<release>\S+) upstatus:(?P<upstatus>\S+) upaddr:(?P<upaddr>\S+) req_time:(?P<req_time>\S+) upr_time:(?P<upr_time>\S+)')
+FIELD_RE = re.compile(
+    r'pool:(?P<pool>\S+) release:(?P<release>\S+) upstatus:(?P<upstatus>\S+) '
+    r'upaddr:(?P<upaddr>\S+) req_time:(?P<req_time>\S+) upr_time:(?P<upr_time>\S+)'
+)
 STATUS_RE = re.compile(r'"\S+\s+\S+\s+\S+"\s+(?P<status>\d{3})')
 
 
 def send_slack(message: str, attachments: dict = None):
-    global last_alert_ts
     if not SLACK_WEBHOOK_URL:
         print('SLACK_WEBHOOK_URL not set; skipping Slack alert')
         return
@@ -49,7 +48,6 @@ def send_slack(message: str, attachments: dict = None):
 
 
 def parse_line(line: str):
-    # Attempt to parse the status and the custom fields
     m_fields = FIELD_RE.search(line)
     m_status = STATUS_RE.search(line)
     if not m_fields or not m_status:
@@ -78,15 +76,46 @@ def check_error_rate():
 
 
 def tail_f(path):
-    # Robust tail - follow file growth
-    with open(path, 'r') as f:
-        f.seek(0, 2)
-        while True:
-            line = f.readline()
-            if not line:
-                time.sleep(0.1)
-                continue
-            yield line
+    """
+    Tail a file without using seek (safe for Docker-mounted logs).
+    Strategy:
+      - Wait until the path exists.
+      - Open and read lines in a loop; if none, sleep briefly and continue.
+      - If the file rotates/recreates, reopen automatically.
+    """
+    last_inode = None
+    while True:
+        # wait for file to appear
+        while not os.path.exists(path):
+            print(f"Waiting for log file: {path}")
+            time.sleep(1)
+
+        try:
+            with open(path, 'r', errors='ignore') as f:
+                print(f"Opened log file: {path}")
+                while True:
+                    line = f.readline()
+                    if line:
+                        yield line
+                    else:
+                        # detect rotation/recreation: if inode changed, break to reopen
+                        try:
+                            stat = os.stat(path)
+                            inode = (stat.st_ino, stat.st_dev)
+                            if last_inode is None:
+                                last_inode = inode
+                            elif inode != last_inode:
+                                print("Log file was rotated/recreated — reopening.")
+                                last_inode = inode
+                                break
+                        except FileNotFoundError:
+                            # file disappeared, reopen loop
+                            print("Log file disappeared — will wait and reopen.")
+                            break
+                        time.sleep(0.5)
+        except Exception as e:
+            print(f"Error opening/reading log file: {e}. Retrying in 1s.")
+            time.sleep(1)
 
 
 def main():
@@ -94,11 +123,6 @@ def main():
 
     if MAINTENANCE_MODE:
         print('MAINTENANCE_MODE is enabled: watcher will start but suppress alerts until mode cleared')
-
-    # wait for file to exist
-    while not os.path.exists(WATCH_LOG_PATH):
-        print(f'waiting for log file: {WATCH_LOG_PATH}')
-        time.sleep(1)
 
     for line in tail_f(WATCH_LOG_PATH):
         parsed = parse_line(line)
@@ -112,9 +136,12 @@ def main():
         pool = parsed['pool']
         now = time.time()
         if last_pool and pool != last_pool and not MAINTENANCE_MODE:
-            # check cooldown
             if now - last_alert_ts > ALERT_COOLDOWN_SEC:
-                msg = f"*Failover detected* — pool changed: {last_pool} → {pool}\nrelease: {parsed['release']}\nupstream: {parsed['upaddr']} upstatus: {parsed['upstatus']}"
+                msg = (
+                    f"*Failover detected* — pool changed: {last_pool} → {pool}\n"
+                    f"release: {parsed['release']}\n"
+                    f"upstream: {parsed['upaddr']} upstatus: {parsed['upstatus']}"
+                )
                 send_slack(msg)
                 last_alert_ts = now
         last_pool = pool
@@ -123,7 +150,10 @@ def main():
         rate = check_error_rate()
         if rate is not None and rate >= ERROR_RATE_THRESHOLD and not MAINTENANCE_MODE:
             if now - last_error_rate_alert_ts > ALERT_COOLDOWN_SEC:
-                msg = f"*High upstream 5xx rate* — {rate:.2f}% 5xx over last {len(status_window)} requests (threshold {ERROR_RATE_THRESHOLD}%).\nMost recent pool: {last_pool}"
+                msg = (
+                    f"*High upstream 5xx rate* — {rate:.2f}% 5xx over last {len(status_window)} requests "
+                    f"(threshold {ERROR_RATE_THRESHOLD}%).\nMost recent pool: {last_pool}"
+                )
                 send_slack(msg)
                 last_error_rate_alert_ts = now
 

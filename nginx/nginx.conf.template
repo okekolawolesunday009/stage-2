@@ -11,13 +11,13 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
     
+    log_format bg_json '$remote_addr - $remote_user [$time_local] "$request" '
+                   '$status $body_bytes_sent "$http_referer" "$http_user_agent" '
+                   'pool:$http_x_app_pool release:$http_x_release_id '
+                   'upstatus:$upstream_status upaddr:$upstream_addr '
+                   'req_time:$request_time upr_time:$upstream_response_time';
     
-    log_format bg_json '$remote_addr - $remote_user [$time_local] "'$request'" '
-    '$status $body_bytes_sent "'$http_referer'" "'$http_user_agent'" '
-    'pool:$http_x_app_pool release:$http_x_release_id upstatus:$upstream_status upaddr:$upstream_addr req_time:$request_time upr_time:$upstream_response_time';
-    
-    
-    access_log /var/log/nginx/access.log bg_json;
+    access_log /var/log/nginx/bg_access.log bg_json;
     
     
     sendfile on;
@@ -47,7 +47,7 @@ http {
         listen 80;
         server_name localhost;
 
-    location / {
+	location / {
             proxy_connect_timeout 1s;
             proxy_send_timeout 5s;
             proxy_read_timeout 5s;
@@ -73,3 +73,4 @@ http {
             proxy_pass http://app_primary;
         }
     }
+}
