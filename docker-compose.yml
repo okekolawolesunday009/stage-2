@@ -8,7 +8,7 @@ services:
       - "${NGINX_PORT}:80"
     volumes:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf:ro
-      - ./logs:/var/log/nginx
+      - nginx-logs:/var/log/nginx
     environment:
       - ACTIVE_POOL=${ACTIVE_POOL}
       - RELEASE_ID_BLUE=${RELEASE_ID_BLUE}
@@ -44,7 +44,7 @@ services:
     build: ./watcher
     container_name: alert_watcher
     volumes:
-      - ./logs:/var/log/nginx:ro
+      - nginx-logs:/var/log/nginx
     env_file: .env
     environment:
       - WATCH_LOG_PATH=/var/log/nginx/access.log
