@@ -1,0 +1,49 @@
+events { }
+
+http {
+    # Primary (blue) / backup (green) upstream configuration
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    upstream app_primary {
+        # primary server -> chosen at container start by the entry command which sets
+        # $PRIMARY and $BACKUP environment variables; envsubst will replace them here.
+        server blue_app:3000 max_fails=1 fail_timeout=2s;
+        # backup server - only used when primary fails
+        server green_app:3000 backup;
+
+        zone backend 64k;
+    }
+
+    
+
+
+
+    server {
+        listen 80;
+        server_name localhost;
+
+        # keep timeouts tight to detect failures quickly
+        location / {
+            proxy_connect_timeout 1s;
+            proxy_send_timeout 5s;
+            proxy_read_timeout 5s;
+
+            # If upstream returns errors/timeouts, allow nginx to try next upstream within
+            # the same client request so the client sees a successful response.
+            proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+            proxy_next_upstream_tries 2;
+
+            # Pass upstream response headers through unchanged (ensure these headers are not stripped)
+            proxy_pass_header X-App-Pool;
+            proxy_pass_header X-Release-Id;
+
+            # Standard proxy headers
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_pass http://app_primary;
+        }
+    }
+}
