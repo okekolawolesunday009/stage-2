@@ -48,8 +48,10 @@ services:
     env_file: .env
     environment:
       - WATCH_LOG_PATH=/var/log/nginx/access.log
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
     depends_on:
       - nginx
+      
 
 networks:
   default:
