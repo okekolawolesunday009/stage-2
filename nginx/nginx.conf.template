@@ -1,6 +1,35 @@
-events { }
+user nginx;
+worker_processes 1;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
 
+
+events {
+    worker_connections 1024;
+}
 http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    
+    
+    log_format bg_json '$remote_addr - $remote_user [$time_local] "'$request'" '
+    '$status $body_bytes_sent "'$http_referer'" "'$http_user_agent'" '
+    'pool:$http_x_app_pool release:$http_x_release_id upstatus:$upstream_status upaddr:$upstream_addr req_time:$request_time upr_time:$upstream_response_time';
+    
+    
+    access_log /var/log/nginx/access.log bg_json;
+    
+    
+    sendfile on;
+    keepalive_timeout 65;
+    
+    
+    upstream backend_blue {
+        server blue_app:8081;
+    }
+    upstream backend_green {
+        server green_app:8082;
+    }
     # Primary (blue) / backup (green) upstream configuration
     resolver 127.0.0.11 valid=10s ipv6=off;
 
@@ -14,30 +43,28 @@ http {
         zone backend 64k;
     }
 
-    
-
-
-
     server {
         listen 80;
         server_name localhost;
 
-        # keep timeouts tight to detect failures quickly
-        location / {
+    location / {
             proxy_connect_timeout 1s;
             proxy_send_timeout 5s;
             proxy_read_timeout 5s;
 
-            # If upstream returns errors/timeouts, allow nginx to try next upstream within
-            # the same client request so the client sees a successful response.
+            if ($http_x_force_pool = "blue") {
+                proxy_pass http://backend_blue;
+            }
+            if ($http_x_force_pool = "green") {
+                proxy_pass http://backend_green;
+            }
+
             proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
             proxy_next_upstream_tries 2;
 
-            # Pass upstream response headers through unchanged (ensure these headers are not stripped)
             proxy_pass_header X-App-Pool;
             proxy_pass_header X-Release-Id;
 
-            # Standard proxy headers
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -46,4 +73,3 @@ http {
             proxy_pass http://app_primary;
         }
     }
-}
