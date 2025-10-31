@@ -17,7 +17,7 @@ http {
                    'upstatus:$upstream_status upaddr:$upstream_addr '
                    'req_time:$request_time upr_time:$upstream_response_time';
     
-    access_log /var/log/nginx/bg_access.log bg_json;
+    access_log /var/log/nginx/access.log bg_json;
     
     
     sendfile on;
