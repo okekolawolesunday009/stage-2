@@ -1,162 +1,136 @@
-#!/usr/bin/env python3
-"""
-Robust log-watcher for Nginx access.log.
-Tails the log file without using seek (works with Docker-mounted logs).
-Parses fields, computes rolling 5xx error rate, and posts alerts to Slack.
-"""
 import os
-import re
+import json
 import time
-from collections import deque
 import requests
-
-# Config from env
-SLACK_WEBHOOK_URL = os.getenv('SLACK_WEBHOOK_URL')
-WATCH_LOG_PATH = os.getenv('WATCH_LOG_PATH', '/var/log/nginx/access.log')
-ERROR_RATE_THRESHOLD = float(os.getenv('ERROR_RATE_THRESHOLD', '2'))  # percent
+from collections import deque
+from datetime import datetime
+# Configuration
+SLACK_WEBHOOK = os.getenv('SLACK_WEBHOOK_URL', '')
+ERROR_THRESHOLD = float(os.getenv('ERROR_RATE_THRESHOLD', '2'))
 WINDOW_SIZE = int(os.getenv('WINDOW_SIZE', '200'))
 ALERT_COOLDOWN_SEC = int(os.getenv('ALERT_COOLDOWN_SEC', '300'))
-MAINTENANCE_MODE = os.getenv('MAINTENANCE_MODE', 'false').lower() in ('1', 'true', 'yes')
-
-# Internal state
-status_window = deque(maxlen=WINDOW_SIZE)
+MAINTENANCE_MODE = os.getenv('MAINTENANCE_MODE', 'false').lower() == 'true'
+LOG_FILE = '/var/log/nginx/access.log'
+# State
 last_pool = None
-last_alert_ts = 0
-last_error_rate_alert_ts = 0
-
-# Regex to extract fields written by our nginx.conf.template
-FIELD_RE = re.compile(
-    r'pool:(?P<pool>\S+) release:(?P<release>\S+) upstatus:(?P<upstatus>\S+) '
-    r'upaddr:(?P<upaddr>\S+) req_time:(?P<req_time>\S+) upr_time:(?P<upr_time>\S+)'
-)
-STATUS_RE = re.compile(r'"\S+\s+\S+\s+\S+"\s+(?P<status>\d{3})')
-
-
-def send_slack(message: str, attachments: dict = None):
-    if not SLACK_WEBHOOK_URL:
-        print('SLACK_WEBHOOK_URL not set; skipping Slack alert')
-        return
-    payload = {"text": message}
-    if attachments:
-        payload.update({"attachments": [attachments]})
-    try:
-        r = requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=5)
-        r.raise_for_status()
-        print(f"Sent Slack alert: {message}")
-    except Exception as e:
-        print(f"Failed sending Slack alert: {e}")
-
-
-def parse_line(line: str):
-    m_fields = FIELD_RE.search(line)
-    m_status = STATUS_RE.search(line)
-    if not m_fields or not m_status:
-        return None
-    try:
-        return {
-            'pool': m_fields.group('pool'),
-            'release': m_fields.group('release'),
-            'upstatus': m_fields.group('upstatus'),
-            'upaddr': m_fields.group('upaddr'),
-            'req_time': float(m_fields.group('req_time')),
-            'upr_time': float(m_fields.group('upr_time')),
-            'status': int(m_status.group('status'))
-        }
-    except Exception:
-        return None
-
-
-def check_error_rate():
-    if len(status_window) < 10:
-        return None
-    total = len(status_window)
-    errors = sum(1 for s in status_window if 500 <= s < 600)
-    rate = (errors / total) * 100
-    return rate
-
-
-def tail_f(path):
-    """
-    Tail a file without using seek (safe for Docker-mounted logs).
-    Strategy:
-      - Wait until the path exists.
-      - Open and read lines in a loop; if none, sleep briefly and continue.
-      - If the file rotates/recreates, reopen automatically.
-    """
-    last_inode = None
-    while True:
-        # wait for file to appear
-        while not os.path.exists(path):
-            print(f"Waiting for log file: {path}")
-            time.sleep(1)
-
-        try:
-            with open(path, 'r', errors='ignore') as f:
-                print(f"Opened log file: {path}")
-                while True:
-                    line = f.readline()
-                    if line:
-                        yield line
-                    else:
-                        # detect rotation/recreation: if inode changed, break to reopen
-                        try:
-                            stat = os.stat(path)
-                            inode = (stat.st_ino, stat.st_dev)
-                            if last_inode is None:
-                                last_inode = inode
-                            elif inode != last_inode:
-                                print("Log file was rotated/recreated — reopening.")
-                                last_inode = inode
-                                break
-                        except FileNotFoundError:
-                            # file disappeared, reopen loop
-                            print("Log file disappeared — will wait and reopen.")
-                            break
-                        time.sleep(0.5)
-        except Exception as e:
-            print(f"Error opening/reading log file: {e}. Retrying in 1s.")
-            time.sleep(1)
-
-
-def main():
-    global last_pool, last_alert_ts, last_error_rate_alert_ts
-
+request_window = deque(maxlen=WINDOW_SIZE)
+last_failover_alert = 0
+last_error_rate_alert = 0
+print(f"[WATCHER] Initialized - Threshold: {ERROR_THRESHOLD}%, Window: {WINDOW_SIZE}")
+def send_slack_alert(alert_type, message, details=None, from_pool=None, to_pool=None):
+    global last_failover_alert, last_error_rate_alert
+    now = time.time()
     if MAINTENANCE_MODE:
-        print('MAINTENANCE_MODE is enabled: watcher will start but suppress alerts until mode cleared')
-
-    for line in tail_f(WATCH_LOG_PATH):
-        parsed = parse_line(line)
-        if not parsed:
-            # Could not parse; skip
-            continue
-
-        status_window.append(parsed['status'])
-
-        # Detect pool flip
-        pool = parsed['pool']
-        now = time.time()
-        if last_pool and pool != last_pool and not MAINTENANCE_MODE:
-            if now - last_alert_ts > ALERT_COOLDOWN_SEC:
-                msg = (
-                    f"*Failover detected* — pool changed: {last_pool} → {pool}\n"
-                    f"release: {parsed['release']}\n"
-                    f"upstream: {parsed['upaddr']} upstatus: {parsed['upstatus']}"
-                )
-                send_slack(msg)
-                last_alert_ts = now
+        print(f"[MAINTENANCE] Alert suppressed: {alert_type}")
+        return
+    if alert_type == 'failover':
+        if now - last_failover_alert < ALERT_COOLDOWN_SEC:
+            return
+        last_failover_alert = now
+    elif alert_type == 'error_rate':
+        if now - last_error_rate_alert < ALERT_COOLDOWN_SEC:
+            return
+        last_error_rate_alert = now
+    emoji_map = {
+        'error_rate': ':rotating_light:',
+        'failover': ':warning:'
+    }
+    emoji = emoji_map.get(alert_type, ':information_source:')
+    slack_payload = {
+        "attachments": [{
+            "title": f"{emoji} {alert_type.upper().replace('_', ' ')} Alert",
+            "text": message,
+            "fields": [
+                {"title": "Timestamp", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "short": True},
+                {"title": "Alert Type", "value": alert_type, "short": True}
+            ],
+            "footer": "Blue/Green Monitor",
+            "ts": int(now)
+        }]
+    }
+    if details:
+        for key, value in details.items():
+            slack_payload["attachments"][0]["fields"].append({
+                "title": key,
+                "value": str(value),
+                "short": True
+            })
+    if SLACK_WEBHOOK:
+        try:
+            response = requests.post(SLACK_WEBHOOK, json=slack_payload, timeout=5)
+            if response.status_code == 200:
+                print(f"[SLACK] Alert sent: {alert_type}")
+            else:
+                print(f"[ERROR] Slack error: {response.status_code}")
+        except Exception as e:
+            print(f"[ERROR] Failed to send alert: {e}")
+    else:
+        print(f"[ALERT] {alert_type}: {message}")
+def check_failover(pool):
+    global last_pool
+    if last_pool is None:
         last_pool = pool
-
-        # Check error rate
-        rate = check_error_rate()
-        if rate is not None and rate >= ERROR_RATE_THRESHOLD and not MAINTENANCE_MODE:
-            if now - last_error_rate_alert_ts > ALERT_COOLDOWN_SEC:
-                msg = (
-                    f"*High upstream 5xx rate* — {rate:.2f}% 5xx over last {len(status_window)} requests "
-                    f"(threshold {ERROR_RATE_THRESHOLD}%).\nMost recent pool: {last_pool}"
-                )
-                send_slack(msg)
-                last_error_rate_alert_ts = now
-
-
+        print(f"[INFO] Initial pool: {pool}")
+        return
+    if pool and pool != last_pool:
+        message = f"Failover detected: {last_pool} → {pool}"
+        details = {
+            "Previous Pool": last_pool,
+            "Current Pool": pool,
+            "Action Required": "Check primary container health"
+        }
+        print(f"[FAILOVER] {message}")
+        send_slack_alert('failover', message, details, from_pool=last_pool, to_pool=pool)
+        last_pool = pool
+def check_error_rate():
+    if len(request_window) < 20:
+        return
+    error_count = sum(1 for had_error in request_window if had_error)
+    total_count = len(request_window)
+    error_rate = (error_count / total_count) * 100
+    if error_rate > ERROR_THRESHOLD:
+        message = f"High error rate: {error_rate:.2f}% (threshold: {ERROR_THRESHOLD}%)"
+        details = {
+            "Error Rate": f"{error_rate:.2f}%",
+            "Threshold": f"{ERROR_THRESHOLD}%",
+            "Requests with Errors": error_count,
+            "Total Requests": total_count,
+            "Action Required": "Inspect logs, consider pool toggle"
+        }
+        print(f"[ERROR_RATE] {message}")
+        send_slack_alert('error_rate', message, details)
+def tail_log():
+    print(f"[WATCHER] Starting to tail {LOG_FILE}")
+    while not os.path.exists(LOG_FILE):
+        print(f"[WATCHER] Waiting for log file...")
+        time.sleep(2)
+    try:
+        with open(LOG_FILE, 'r') as f:
+            f.seek(0, 2)
+            print("[WATCHER] Ready. Monitoring logs...")
+            while True:
+                line = f.readline()
+                if line:
+                    try:
+                        log_entry = json.loads(line.strip())
+                        pool = log_entry.get('pool', '')
+                        upstream_status = log_entry.get('upstream_status', '')
+                        had_error = False
+                        if upstream_status:
+                            statuses = str(upstream_status).split(', ')
+                            had_error = any(s.startswith('5') for s in statuses if s.strip())
+                        request_window.append(had_error)
+                        if pool:
+                            check_failover(pool)
+                        check_error_rate()
+                    except json.JSONDecodeError:
+                        pass
+                else:
+                    time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\n[WATCHER] Shutting down...")
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        raise
 if __name__ == '__main__':
-    main()
+    tail_log()
