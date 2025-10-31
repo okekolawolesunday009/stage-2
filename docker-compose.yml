@@ -41,16 +41,20 @@ services:
       - APP_POOL=green
 
   alert_watcher:
-    build: ./watcher
+    build:
+      context: .
+      dockerfile: watcher/Dockerfile
     container_name: alert_watcher
     volumes:
       - ./logs:/var/log/nginx
     env_file: .env
     environment:
       - WATCH_LOG_PATH=/var/log/nginx/access.log
-      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - SLACK_WEBHOOK_URL_URL=${SLACK_WEBHOOK_URL_URL}
     depends_on:
       - nginx
+    command: ["python", "watcher.py"]
+    
 
 
 volumes:
