@@ -47,7 +47,7 @@ services:
       - nginx-logs:/var/log/nginx
     env_file: .env
     environment:
-      - WATCH_LOG_PATH=/var/log/nginx/access.log
+      - WATCH_LOG_PATH=/var/log/nginx/bg_access.log
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
     depends_on:
       - nginx

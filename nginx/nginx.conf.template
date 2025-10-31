@@ -13,7 +13,7 @@ http {
     
     log_format bg_json '$remote_addr - $remote_user [$time_local] "$request" '
                    '$status $body_bytes_sent "$http_referer" "$http_user_agent" '
-                   'pool:$http_x_app_pool release:$http_x_release_id '
+                   'pool:$upstream_http_x_app_pool release:$upstream_http_x_release_id '
                    'upstatus:$upstream_status upaddr:$upstream_addr '
                    'req_time:$request_time upr_time:$upstream_response_time';
     
@@ -25,10 +25,10 @@ http {
     
     
     upstream backend_blue {
-        server blue_app:8081;
+        server blue_app:3000;
     }
     upstream backend_green {
-        server green_app:8082;
+        server green_app:3000;
     }
     # Primary (blue) / backup (green) upstream configuration
     resolver 127.0.0.11 valid=10s ipv6=off;
