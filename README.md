@@ -6,7 +6,7 @@ Quick start intro
 
 ### Setup Instructions
 
-1. Copy `.env.example` to `.env` and edit values (especially `SLACK_WEBHOOK_URL`).
+1. Copy `.env.example` to `.env` and edit values (especially `SLACK_self.webhook_url`).
 2. Start all services:
    ```bash
    docker-compose up -d
@@ -45,9 +45,9 @@ Quick start intro
 
 ### Screenshots
 
-_Screenshots of Slack alerts and dashboards should be placed in the project directory and referenced here._
-- Example: `screenshots/slack_failover_alert.png`
-- Example: `screenshots/slack_error_rate_alert.png`
+Slack alert screenshots:
+- ![Failover Alert](screenshots/slack_failover_alert.png)
+- ![Error Rate Alert](screenshots/slack_error_rate_alert.png)
 
 Notes
 - This repository contains deployment artifacts (docker-compose, nginx templates, CI workflow). It does not contain application source code — the `BLUE_IMAGE` and `GREEN_IMAGE` environment variables should point to built container images.
@@ -84,6 +84,12 @@ Improvements
 
 ---
 
+## Support / Contact
+
+For support or incident escalation, contact:
+- Primary: DevOps Team (devops@example.com)
+- Backup: Project Maintainer (maintainer@example.com)
+
 ## Alert Watcher
 
 A containerized alerting system monitors NGINX logs for failover and high error rate events, sending Slack notifications when thresholds are exceeded.
@@ -93,11 +99,11 @@ A containerized alerting system monitors NGINX logs for failover and high error 
 - **Alerts:**
   - Failover (pool switch)
   - High error rate (5xx responses)
-- **Notification:** Slack webhook (set `SLACK_WEBHOOK_URL` in `.env`)
+- **Notification:** Slack webhook (set `SLACK_self.webhook_url` in `.env`)
 
 ### Usage
 
-1. Ensure `SLACK_WEBHOOK_URL` is set in your `.env` file.
+1. Ensure `SLACK_self.webhook_url` is set in your `.env` file.
 2. The watcher runs automatically with `docker-compose up -d`.
 3. Alerts and meanings are detailed in [`runbook.md`](./runbook.md).
 

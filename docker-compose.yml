@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   nginx:
@@ -7,8 +7,8 @@ services:
     ports:
       - "${NGINX_PORT}:80"
     volumes:
-      - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf:ro
-      - ./logs:/var/log/nginx
+      - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
+      - nginx_logs:/var/log/nginx
     environment:
       - ACTIVE_POOL=${ACTIVE_POOL}
       - RELEASE_ID_BLUE=${RELEASE_ID_BLUE}
@@ -16,7 +16,16 @@ services:
     depends_on:
       - blue_app
       - green_app
-    # command: /bin/sh -c "if [ \"$ACTIVE_POOL\" = 'blue' ]; then export PRIMARY=blue_app; export BACKUP=green_app; else export PRIMARY=green_app; export BACKUP=blue_app; fi && envsubst '\$PRIMARY \$BACKUP \$RELEASE_ID_BLUE \$RELEASE_ID_GREEN' < /etc/nginx/nginx.conf > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+    command: >
+      sh -c "
+        if [ \"$ACTIVE_POOL\" = 'blue' ]; then export PRIMARY=blue_app; export BACKUP=green_app;
+        else export PRIMARY=green_app; export BACKUP=blue_app; fi &&
+        envsubst '\$PRIMARY \$BACKUP \$RELEASE_ID_BLUE \$RELEASE_ID_GREEN' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
+        rm -f /var/log/nginx/access.log /var/log/nginx/error.log &&
+        touch /var/log/nginx/access.log /var/log/nginx/error.log &&
+        nginx -g 'daemon off;'
+      "
+
 
   blue_app:
     image: ${BLUE_IMAGE}
@@ -41,24 +50,29 @@ services:
       - APP_POOL=green
 
   alert_watcher:
-    build:
-      context: .
-      dockerfile: watcher/Dockerfile
+    image: python:3.9-slim
+    working_dir: /app
     container_name: alert_watcher
     volumes:
-      - ./logs:/var/log/nginx
-    env_file: .env
+      - ./watcher/watcher.py:/app/watcher.py
+      - ./watcher/requirements.txt:/app/requirements.txt
+      - nginx_logs:/var/log/nginx
     environment:
-      - WATCH_LOG_PATH=/var/log/nginx/access.log
-      - SLACK_WEBHOOK_URL_URL=${SLACK_WEBHOOK_URL_URL}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - ERROR_RATE_THRESHOLD=${ERROR_RATE_THRESHOLD:-2}
+      - WINDOW_SIZE=${WINDOW_SIZE:-200}
+      - ALERT_COOLDOWN_SEC=${ALERT_COOLDOWN_SEC:-300}
+    command: >
+      sh -c "pip install -r requirements.txt &&
+             echo 'Starting watcher...' &&
+             python -u watcher.py"
     depends_on:
       - nginx
-    command: ["python", "watcher.py"]
+    restart: unless-stopped
     
 
-
 volumes:
-  nginx-logs: {}    # <-- declares the named volume
+  nginx_logs: {}    # <-- declares the named volume
 
 networks:
   default:
