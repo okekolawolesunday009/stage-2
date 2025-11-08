@@ -20,7 +20,7 @@ services:
       sh -c "
         if [ \"$ACTIVE_POOL\" = 'blue' ]; then export PRIMARY=blue_app; export BACKUP=green_app;
         else export PRIMARY=green_app; export BACKUP=blue_app; fi &&
-        envsubst '\$PRIMARY \$BACKUP \$RELEASE_ID_BLUE \$RELEASE_ID_GREEN' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf &&
+        envsubst '\$PRIMARY \$BACKUP \$RELEASE_ID_BLUE \$RELEASE_ID_GREEN' < /etc/nginx/nginx.conf.template > /etc/nginx/default.conf &&
         rm -f /var/log/nginx/access.log /var/log/nginx/error.log &&
         touch /var/log/nginx/access.log /var/log/nginx/error.log &&
         nginx -g 'daemon off;'
